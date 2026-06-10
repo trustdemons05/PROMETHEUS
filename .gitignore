@@ -4,3 +4,31 @@ venv/
 __pycache__/
 *.pyc
 .env
+
+# Local/editor state
+.hive/
+.summary_files/
+.vscode/
+
+# Duplicate/legacy exports kept locally only
+genome-doc-code/
+nre-final-pass/
+run_experiment.ipynb
+PROJECT_COMPREHENSIVE_GUIDE.txt
+GenomeDoc_Architecture_and_Documentation.md
+
+# Generated training artifacts and datasets
+genome-doc/data/synthetic/
+genome-doc/checkpoints/
+genome-doc/outputs/
+genome-doc/logs/
+wandb/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.onnxruntime
+
+# Generated binary presentation exports
+*.pptx
