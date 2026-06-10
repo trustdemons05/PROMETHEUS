@@ -1,0 +1,6 @@
+*.zip
+genome-doc.zip
+venv/
+__pycache__/
+*.pyc
+.env
