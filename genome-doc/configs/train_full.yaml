@@ -1,0 +1,36 @@
+# Full Training Pipeline Configuration
+# Controls the overall training schedule for all modules
+
+pipeline:
+  stages:
+    - name: "sir_pretraining"
+      config: "configs/sir_resnet.yaml"
+      enabled: true
+      order: 1
+
+    - name: "dgi_finetuning"
+      config: "configs/dgi_donut.yaml"
+      enabled: true
+      order: 2
+
+    - name: "nre_training"
+      config: "configs/nre_controlnet.yaml"
+      enabled: true
+      order: 3
+
+# Shared settings
+common:
+  seed: 42
+  output_dir: "outputs"
+  checkpoint_dir: "checkpoints"
+  log_dir: "logs"
+  device: "auto"             # auto | cuda | cpu
+  
+  # Dataset
+  dataset_size: 30000        # Lean version: 30K pairs
+  train_split: 0.9
+  val_split: 0.1
+
+  # Reproducibility
+  deterministic: true
+  benchmark: false           # Set true if input sizes are fixed

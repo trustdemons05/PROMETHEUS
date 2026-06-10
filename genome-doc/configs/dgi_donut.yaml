@@ -1,0 +1,57 @@
+# DGI — Document Genome Inferrer Configuration
+# Backbone: Donut-base with LoRA fine-tuning
+
+model:
+  backbone: "naver-clova-ix/donut-base"
+  max_length: 2048          # Max tokens for genome JSON generation
+  image_size: [1280, 960]   # Donut default input resolution
+
+  # LoRA configuration
+  lora:
+    enabled: true
+    rank: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules:
+      - "q_proj"
+      - "v_proj"
+      - "k_proj"
+      - "out_proj"
+
+  # Layout head (parallel bbox regression)
+  layout_head:
+    hidden_dim: 256
+    num_layers: 2
+    max_regions: 64         # Max text regions per page
+
+training:
+  batch_size: 8             # Optimized for 96GB VRAM (Blackwell)
+  gradient_accumulation: 4  # Effective batch = 32
+  learning_rate: 5.0e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  max_epochs: 30
+  fp16: true
+  gradient_clip: 1.0
+
+  # Loss weights
+  loss_weights:
+    genome_ce: 1.0          # Cross-entropy on JSON tokens
+    bbox_l1: 5.0            # L1 regression on bounding boxes
+    bbox_giou: 2.0          # Generalized IoU loss on bboxes
+
+  # Early stopping
+  patience: 5
+  metric: "genome_token_f1"
+
+data:
+  train_dir: "data/synthetic/train"
+  val_dir: "data/synthetic/val"
+  num_workers: 8
+  prefetch_factor: 2
+
+logging:
+  project: "genome-doc"
+  entity: null              # Set your wandb entity
+  log_every_n_steps: 50
+  save_every_n_epochs: 5

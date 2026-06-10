@@ -1,0 +1,52 @@
+# SIR — Style & Identity Refiner Configuration
+# Backbone: ResNet-50 with contrastive pre-training
+
+model:
+  backbone: "resnet50"
+  pretrained: true          # Start from ImageNet weights
+  embedding_dim: 512        # Output style embedding dimension
+  
+  # Patch selection
+  patch_selector:
+    patch_size: 128          # 128x128 pixel patches
+    top_k: 8                 # Select top-K cleanest patches
+    quality_features:
+      - "local_contrast"
+      - "edge_sharpness"
+      - "noise_estimate"
+
+  # Aggregation
+  aggregation: "attention_weighted_mean"  # attention_weighted_mean | mean | max
+  temperature: 0.07         # InfoNCE temperature
+
+training:
+  batch_size: 256           # Optimized for 96GB VRAM (Blackwell/RTX 6000 Ada)
+  gradient_accumulation: 1
+  learning_rate: 6.0e-4     # Increased LR slightly to account for the massive 8x batch size jump
+  weight_decay: 1.0e-4
+  warmup_epochs: 5
+  max_epochs: 100
+  fp16: true
+  optimizer: "adamw"
+
+  # Contrastive learning
+  contrastive:
+    loss: "infonce"
+    temperature: 0.07
+    num_negatives: 256      # Negatives per positive pair
+    hard_negative_ratio: 0.3  # 30% hard negatives
+
+  # Early stopping
+  patience: 10
+  metric: "retrieval_accuracy_top5"
+
+data:
+  train_dir: "data/synthetic/train"
+  val_dir: "data/synthetic/val"
+  patches_per_document: 16
+  num_workers: 4
+
+logging:
+  project: "genome-doc"
+  log_every_n_steps: 100
+  save_every_n_epochs: 10
