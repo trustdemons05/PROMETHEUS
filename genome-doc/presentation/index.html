@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genome-Doc — Neural Document Restoration</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ========== Reset & Global ========== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #0a0a0f;
+    color: #e4e4e7;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* ========== Presentation Container ========== */
+  .presentation {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ========== Slide Base ========== */
+  .slide {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 4rem 6rem;
+    opacity: 0;
+    visibility: hidden;
+    transition: none;
+    z-index: 0;
+  }
+  .slide.active {
+    opacity: 1;
+    visibility: visible;
+    z-index: 10;
+  }
+
+  /* ========== Slide Backgrounds ========== */
+  .slide::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+  }
+
+  .slide-title::before {
+    background: radial-gradient(ellipse at 30% 50%, rgba(56, 189, 248, 0.08) 0%, transparent 60%),
+                radial-gradient(ellipse at 70% 30%, rgba(168, 85, 247, 0.06) 0%, transparent 60%),
+                linear-gradient(180deg, #0a0a0f 0%, #0f0f1a 100%);
+  }
+  .slide-problem::before {
+    background: radial-gradient(ellipse at 50% 80%, rgba(239, 68, 68, 0.06) 0%, transparent 60%),
+                linear-gradient(180deg, #0f0f1a 0%, #0a0a0f 100%);
+  }
+  .slide-arch::before {
+    background: radial-gradient(ellipse at 50% 50%, rgba(56, 189, 248, 0.05) 0%, transparent 70%),
+                linear-gradient(135deg, #0a0a0f 0%, #0d0d1a 100%);
+  }
+  .slide-sir::before {
+    background: radial-gradient(ellipse at 30% 40%, rgba(16, 185, 129, 0.08) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 70%, rgba(245, 158, 11, 0.05) 0%, transparent 60%),
+                linear-gradient(180deg, #0a0a0f 0%, #0a100f 100%);
+  }
+  .slide-dgi::before {
+    background: radial-gradient(ellipse at 60% 40%, rgba(99, 102, 241, 0.08) 0%, transparent 60%),
+                linear-gradient(180deg, #0a0a0f 0%, #0d0a14 100%);
+  }
+  .slide-nre::before {
+    background: radial-gradient(ellipse at 40% 60%, rgba(236, 72, 153, 0.07) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 30%, rgba(251, 191, 36, 0.05) 0%, transparent 60%),
+                linear-gradient(180deg, #0a0a0f 0%, #140a0d 100%);
+  }
+  .slide-pipeline::before {
+    background: radial-gradient(ellipse at 50% 50%, rgba(56, 189, 248, 0.06) 0%, transparent 60%),
+                linear-gradient(180deg, #0a0a0f 0%, #0f0f1a 100%);
+  }
+  .slide-metrics::before {
+    background: radial-gradient(ellipse at 50% 50%, rgba(16, 185, 129, 0.06) 0%, transparent 60%),
+                linear-gradient(180deg, #0a0a0f 0%, #0a0f0d 100%);
+  }
+  .slide-next::before {
+    background: radial-gradient(ellipse at 40% 40%, rgba(168, 85, 247, 0.08) 0%, transparent 60%),
+                radial-gradient(ellipse at 70% 70%, rgba(56, 189, 248, 0.06) 0%, transparent 60%),
+                linear-gradient(180deg, #0a0a0f 0%, #0f0a14 100%);
+  }
+  .slide-end::before {
+    background: radial-gradient(ellipse at 50% 50%, rgba(56, 189, 248, 0.1) 0%, transparent 50%),
+                radial-gradient(ellipse at 30% 80%, rgba(168, 85, 247, 0.08) 0%, transparent 50%),
+                linear-gradient(180deg, #0a0a0f 0%, #0f0f1a 100%);
+  }
+
+  /* ========== Transition Animations ========== */
+  /* Morph Scale */
+  @keyframes morphIn {
+    0% { transform: scale(0.85) rotate3d(1,1,0, 8deg); opacity: 0; filter: blur(12px); }
+    100% { transform: scale(1) rotate3d(0,0,0, 0deg); opacity: 1; filter: blur(0); }
+  }
+  @keyframes morphOut {
+    0% { transform: scale(1); opacity: 1; filter: blur(0); }
+    100% { transform: scale(1.15) rotate3d(1,-1,0, 6deg); opacity: 0; filter: blur(10px); }
+  }
+  /* Liquid Slide */
+  @keyframes liquidIn {
+    0% { clip-path: circle(0% at 50% 50%); opacity: 0; }
+    60% { opacity: 1; }
+    100% { clip-path: circle(150% at 50% 50%); opacity: 1; }
+  }
+  @keyframes liquidOut {
+    0% { clip-path: circle(150% at 50% 50%); opacity: 1; }
+    100% { clip-path: circle(0% at 50% 50%); opacity: 0; }
+  }
+  /* Perspective Flip */
+  @keyframes flipIn {
+    0% { transform: perspective(2000px) rotateY(-90deg); opacity: 0; }
+    60% { transform: perspective(2000px) rotateY(8deg); opacity: 1; }
+    100% { transform: perspective(2000px) rotateY(0deg); opacity: 1; }
+  }
+  @keyframes flipOut {
+    0% { transform: perspective(2000px) rotateY(0deg); opacity: 1; }
+    100% { transform: perspective(2000px) rotateY(90deg); opacity: 0; }
+  }
+  /* Glitch */
+  @keyframes glitchIn {
+    0% { transform: translate(-5px, 3px) skewX(3deg); opacity: 0; filter: hue-rotate(90deg); }
+    20% { transform: translate(3px, -2px) skewX(-2deg); opacity: 0.5; filter: hue-rotate(-60deg); }
+    40% { transform: translate(-2px, 1px) skewX(1deg); opacity: 0.8; filter: hue-rotate(30deg); }
+    60% { transform: translate(1px, -1px); opacity: 0.9; filter: hue-rotate(0deg); }
+    100% { transform: translate(0); opacity: 1; filter: hue-rotate(0deg); }
+  }
+  /* Zoom Rotate */
+  @keyframes zoomRotateIn {
+    0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+  @keyframes zoomRotateOut {
+    0% { transform: scale(1) rotate(0deg); opacity: 1; }
+    100% { transform: scale(0) rotate(180deg); opacity: 0; }
+  }
+
+  .transition-morph.entering { animation: morphIn 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .transition-morph.leaving { animation: morphOut 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .transition-liquid.entering { animation: liquidIn 1.0s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .transition-liquid.leaving { animation: liquidOut 0.6s ease-in forwards; }
+  .transition-flip.entering { animation: flipIn 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .transition-flip.leaving { animation: flipOut 0.5s ease-in forwards; }
+  .transition-glitch.entering { animation: glitchIn 0.7s ease-out forwards; }
+  .transition-glitch.leaving { animation: morphOut 0.5s ease-in forwards; }
+  .transition-zoomRotate.entering { animation: zoomRotateIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .transition-zoomRotate.leaving { animation: zoomRotateOut 0.6s ease-in forwards; }
+
+  /* ========== Content Animations ========== */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(40px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeRight {
+    from { opacity: 0; transform: translateX(-50px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.05); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  @keyframes borderGlow {
+    0%, 100% { border-color: rgba(56, 189, 248, 0.2); box-shadow: 0 0 20px rgba(56, 189, 248, 0.05); }
+    50% { border-color: rgba(56, 189, 248, 0.5); box-shadow: 0 0 30px rgba(56, 189, 248, 0.1); }
+  }
+
+  .animate-item {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  .slide.active .animate-item {
+    animation: fadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .slide.active .animate-item:nth-child(1) { animation-delay: 0.1s; }
+  .slide.active .animate-item:nth-child(2) { animation-delay: 0.25s; }
+  .slide.active .animate-item:nth-child(3) { animation-delay: 0.4s; }
+  .slide.active .animate-item:nth-child(4) { animation-delay: 0.55s; }
+  .slide.active .animate-item:nth-child(5) { animation-delay: 0.7s; }
+  .slide.active .animate-item:nth-child(6) { animation-delay: 0.85s; }
+
+  /* ========== Typography ========== */
+  .super-title {
+    font-size: 4.5rem;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #38bdf8, #a78bfa, #38bdf8);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 6s ease-in-out infinite;
+  }
+  .section-title {
+    font-size: 3rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  .subtitle {
+    font-size: 1.35rem;
+    font-weight: 300;
+    color: rgba(228, 228, 231, 0.6);
+    line-height: 1.6;
+    max-width: 700px;
+  }
+  .label-tag {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 0.35rem 1rem;
+    border-radius: 100px;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  .label-cyan { color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.08); }
+  .label-green { color: #10b981; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); }
+  .label-purple { color: #a78bfa; border-color: rgba(167, 139, 250, 0.3); background: rgba(167, 139, 250, 0.08); }
+  .label-pink { color: #ec4899; border-color: rgba(236, 72, 153, 0.3); background: rgba(236, 72, 153, 0.08); }
+  .label-amber { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.08); }
+
+  /* ========== Glass Cards ========== */
+  .glass {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    backdrop-filter: blur(20px);
+    padding: 2rem;
+  }
+  .glass-sm { padding: 1.2rem 1.5rem; border-radius: 16px; }
+  .glass:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    transition: all 0.4s ease;
+  }
+
+  /* ========== Split Layout ========== */
+  .split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    width: 100%;
+    max-width: 1200px;
+    align-items: center;
+  }
+  .split-visual img {
+    width: 100%;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.06);
+    animation: float 6s ease-in-out infinite;
+  }
+
+  /* ========== Pipeline Visual ========== */
+  .pipeline {
+    display: flex;
+    gap: 0;
+    align-items: center;
+    width: 100%;
+    max-width: 1100px;
+    margin-top: 2rem;
+  }
+  .pipeline-node {
+    flex: 1;
+    text-align: center;
+    position: relative;
+  }
+  .pipeline-box {
+    padding: 1.5rem;
+    border-radius: 16px;
+    border: 1px solid;
+    position: relative;
+    transition: all 0.4s ease;
+  }
+  .pipeline-box:hover { transform: translateY(-4px); }
+  .pipeline-arrow {
+    width: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.2);
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .pipeline-box h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.3rem; }
+  .pipeline-box p { font-size: 0.8rem; color: rgba(228,228,231,0.5); line-height: 1.4; }
+
+  .pipe-sir { border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05); }
+  .pipe-sir h3 { color: #10b981; }
+  .pipe-dgi { border-color: rgba(99, 102, 241, 0.3); background: rgba(99, 102, 241, 0.05); }
+  .pipe-dgi h3 { color: #818cf8; }
+  .pipe-nre { border-color: rgba(236, 72, 153, 0.3); background: rgba(236, 72, 153, 0.05); }
+  .pipe-nre h3 { color: #ec4899; }
+
+  /* ========== Status Badge ========== */
+  .status-done {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 0.25rem 0.8rem;
+    border-radius: 100px;
+    animation: borderGlow 3s ease-in-out infinite;
+    --glow-color: rgba(16, 185, 129, 0.3);
+  }
+  .status-next {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    padding: 0.25rem 0.8rem;
+    border-radius: 100px;
+  }
+
+  /* ========== Metrics Grid ========== */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 1000px;
+  }
+  .metric-card {
+    text-align: center;
+    padding: 1.5rem;
+  }
+  .metric-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .metric-label {
+    font-size: 0.85rem;
+    color: rgba(228,228,231,0.5);
+    margin-top: 0.3rem;
+  }
+  .metric-dir {
+    font-size: 0.7rem;
+    margin-top: 0.2rem;
+  }
+
+  /* ========== Feature List ========== */
+  .features {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .feature-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+  }
+  .feature-text h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.15rem; }
+  .feature-text p { font-size: 0.8rem; color: rgba(228,228,231,0.5); line-height: 1.4; }
+
+  /* ========== Next Steps ========== */
+  .steps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    width: 100%;
+    max-width: 800px;
+  }
+  .step-row {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1.2rem 1.5rem;
+  }
+  .step-number {
+    font-size: 1.8rem;
+    font-weight: 800;
+    font-family: 'JetBrains Mono', monospace;
+    width: 50px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .step-content h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.2rem; }
+  .step-content p { font-size: 0.85rem; color: rgba(228,228,231,0.5); }
+
+  /* ========== Floating Particles ========== */
+  .particles {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .particle {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: rgba(56, 189, 248, 0.3);
+    border-radius: 50%;
+    animation: float-particle linear infinite;
+  }
+  @keyframes float-particle {
+    0% { transform: translateY(100vh) translateX(0); opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { transform: translateY(-10vh) translateX(30px); opacity: 0; }
+  }
+
+  /* ========== Navigation ========== */
+  .nav-bar {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    z-index: 100;
+    background: rgba(10, 10, 15, 0.8);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 100px;
+    padding: 0.6rem 1.2rem;
+  }
+  .nav-dots {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .nav-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    border: none;
+    cursor: pointer;
+    transition: all 0.4s ease;
+  }
+  .nav-dot.active {
+    width: 24px;
+    border-radius: 4px;
+    background: #38bdf8;
+  }
+  .nav-btn {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.6);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    transition: all 0.3s ease;
+  }
+  .nav-btn:hover { border-color: #38bdf8; color: #38bdf8; }
+
+  .slide-counter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.3);
+    min-width: 40px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<!-- Floating Particles -->
+<div class="particles" id="particles"></div>
+
+<!-- Presentation -->
+<div class="presentation" id="presentation">
+
+  <!-- ==================== SLIDE 1: Title ==================== -->
+  <div class="slide slide-title active" data-transition="morph">
+    <div style="text-align:center">
+      <div class="animate-item">
+        <span class="label-tag label-cyan">IEEE Research Paper</span>
+      </div>
+      <h1 class="super-title animate-item" style="margin-top:1.5rem">Genome-Doc</h1>
+      <p class="subtitle animate-item" style="margin-top:1rem; text-align:center; margin-left:auto; margin-right:auto;">
+        A Novel Structured Intermediate Representation for<br>
+        Zero-Hallucination Neural Document Restoration
+      </p>
+      <div class="animate-item" style="margin-top:2.5rem; display:flex; gap:1rem; justify-content:center;">
+        <span class="label-tag label-green">SIR ✓</span>
+        <span class="label-tag label-purple">DGI — Next</span>
+        <span class="label-tag label-pink">NRE — Next</span>
+      </div>
+      <p class="animate-item" style="margin-top:3rem; font-size:0.8rem; color:rgba(228,228,231,0.3);">
+        Press <kbd style="padding:0.15rem 0.5rem; border:1px solid rgba(255,255,255,0.15); border-radius:4px; font-family:'JetBrains Mono',monospace; font-size:0.7rem;">→</kbd> to navigate
+      </p>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 2: Problem ==================== -->
+  <div class="slide slide-problem" data-transition="liquid">
+    <div style="text-align:center; max-width:900px;">
+      <span class="label-tag label-cyan animate-item">The Problem</span>
+      <h2 class="section-title animate-item" style="margin-top:1.5rem;">
+        Current methods <span style="color:#ef4444;">hallucinate</span> text
+      </h2>
+      <p class="subtitle animate-item" style="margin-top:1rem; text-align:center; margin-left:auto; margin-right:auto;">
+        End-to-end diffusion models generate visually plausible documents —<br>
+        but they <em>invent</em> words, scramble letters, and break layouts.
+      </p>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.5rem; margin-top:2.5rem; width:100%;">
+        <div class="glass glass-sm animate-item" style="text-align:left;">
+          <div style="font-size:2rem; margin-bottom:0.5rem;">🔤</div>
+          <h4 style="font-size:0.9rem; font-weight:600; margin-bottom:0.3rem;">Text Hallucination</h4>
+          <p style="font-size:0.8rem; color:rgba(228,228,231,0.5); line-height:1.4;">
+            Diffusion models treat text as pixels, inventing plausible-looking but wrong characters
+          </p>
+        </div>
+        <div class="glass glass-sm animate-item" style="text-align:left;">
+          <div style="font-size:2rem; margin-bottom:0.5rem;">📐</div>
+          <h4 style="font-size:0.9rem; font-weight:600; margin-bottom:0.3rem;">Layout Drift</h4>
+          <p style="font-size:0.8rem; color:rgba(228,228,231,0.5); line-height:1.4;">
+            Headings become body text, margins shift, and structural hierarchy is lost
+          </p>
+        </div>
+        <div class="glass glass-sm animate-item" style="text-align:left;">
+          <div style="font-size:2rem; margin-bottom:0.5rem;">🎨</div>
+          <h4 style="font-size:0.9rem; font-weight:600; margin-bottom:0.3rem;">Style Loss</h4>
+          <p style="font-size:0.8rem; color:rgba(228,228,231,0.5); line-height:1.4;">
+            Original font families, ink weight, and paper texture are replaced by generic defaults
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 3: Solution ==================== -->
+  <div class="slide slide-arch" data-transition="flip">
+    <div style="text-align:center; max-width:1000px;">
+      <span class="label-tag label-purple animate-item">Our Approach</span>
+      <h2 class="section-title animate-item" style="margin-top:1.5rem;">
+        The Document<br><span style="background: linear-gradient(135deg, #38bdf8, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Genome</span>
+      </h2>
+      <p class="subtitle animate-item" style="margin-top:1rem; text-align:center; margin-left:auto; margin-right:auto;">
+        Instead of pixel-to-pixel restoration, we extract a structured JSON representation —<br>
+        the <em>Document Genome</em> — then re-render from scratch with perfect fidelity.
+      </p>
+
+      <div class="pipeline animate-item" style="margin-top:2.5rem;">
+        <div class="pipeline-node">
+          <div class="pipeline-box" style="border-color:rgba(239,68,68,0.3); background:rgba(239,68,68,0.05);">
+            <h3 style="color:#ef4444;">Degraded Doc</h3>
+            <p>Noisy, torn, faded input</p>
+          </div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node">
+          <div class="pipeline-box pipe-dgi">
+            <h3>DGI</h3>
+            <p>Extract Genome JSON</p>
+          </div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node">
+          <div class="pipeline-box pipe-sir">
+            <h3>SIR</h3>
+            <p>Capture style DNA</p>
+          </div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node">
+          <div class="pipeline-box pipe-nre">
+            <h3>NRE</h3>
+            <p>Re-render clean doc</p>
+          </div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node">
+          <div class="pipeline-box" style="border-color:rgba(16,185,129,0.3); background:rgba(16,185,129,0.05);">
+            <h3 style="color:#10b981;">Clean Doc</h3>
+            <p>Zero hallucination</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 4: SIR (DONE) ==================== -->
+  <div class="slide slide-sir" data-transition="morph">
+    <div class="split">
+      <div>
+        <div class="animate-item" style="display:flex; gap:0.6rem; align-items:center;">
+          <span class="label-tag label-green">Module 1</span>
+          <span class="status-done">✓ Complete</span>
+        </div>
+        <h2 class="section-title animate-item" style="margin-top:1rem;">
+          <span style="color:#10b981;">SIR</span><br>Style & Identity Refiner
+        </h2>
+        <p class="subtitle animate-item" style="margin-top:0.8rem;">
+          Captures the visual DNA of a document — fonts, paper texture, ink color — as a 512-dim embedding.
+        </p>
+        <div class="features animate-item" style="margin-top:1.5rem;">
+          <div class="feature-item">
+            <div class="feature-icon" style="background:rgba(16,185,129,0.1); color:#10b981;">🔍</div>
+            <div class="feature-text">
+              <h4>Quality Patch Selector</h4>
+              <p>Finds the 8 cleanest 128×128 regions via learned + handcrafted scoring</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon" style="background:rgba(16,185,129,0.1); color:#10b981;">🧠</div>
+            <div class="feature-text">
+              <h4>ResNet-50 Backbone</h4>
+              <p>Attention-weighted pooling → single 512-dim style fingerprint</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon" style="background:rgba(16,185,129,0.1); color:#10b981;">⚡</div>
+            <div class="feature-text">
+              <h4>InfoNCE Contrastive Training</h4>
+              <p>Hard negative mining, warmup scheduling, FP16 mixed precision</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="split-visual animate-item">
+        <img src="assets/sir_visual.png" alt="SIR visualization">
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 5: DGI (NEXT) ==================== -->
+  <div class="slide slide-dgi" data-transition="glitch">
+    <div class="split">
+      <div>
+        <div class="animate-item" style="display:flex; gap:0.6rem; align-items:center;">
+          <span class="label-tag label-purple">Module 2</span>
+          <span class="status-next">⟳ Next Step</span>
+        </div>
+        <h2 class="section-title animate-item" style="margin-top:1rem;">
+          <span style="color:#818cf8;">DGI</span><br>Document Genome Inferrer
+        </h2>
+        <p class="subtitle animate-item" style="margin-top:0.8rem;">
+          Reads the degraded image and outputs a complete structured Genome — every text region, its type, content, and bounding box.
+        </p>
+        <div class="features animate-item" style="margin-top:1.5rem;">
+          <div class="feature-item">
+            <div class="feature-icon" style="background:rgba(99,102,241,0.1); color:#818cf8;">🍩</div>
+            <div class="feature-text">
+              <h4>Donut Backbone</h4>
+              <p>OCR-free VisionEncoder → TransformerDecoder with template-guided decoding</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon" style="background:rgba(99,102,241,0.1); color:#818cf8;">📦</div>
+            <div class="feature-text">
+              <h4>LayoutHead</h4>
+              <p>Parallel MLP for bounding box regression with L1 + GIoU loss</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon" style="background:rgba(99,102,241,0.1); color:#818cf8;">🔧</div>
+            <div class="feature-text">
+              <h4>LoRA Fine-tuning</h4>
+              <p>Only 2.3% params trainable — encoder frozen, rank-16 adapters on decoder</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="split-visual animate-item">
+        <img src="assets/dgi_visual.png" alt="DGI visualization">
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 6: NRE (NEXT) ==================== -->
+  <div class="slide slide-nre" data-transition="liquid">
+    <div class="split">
+      <div>
+        <div class="animate-item" style="display:flex; gap:0.6rem; align-items:center;">
+          <span class="label-tag label-pink">Module 3</span>
+          <span class="status-next">⟳ Next Step</span>
+        </div>
+        <h2 class="section-title animate-item" style="margin-top:1rem;">
+          <span style="color:#ec4899;">NRE</span><br>Neural Re-Rendering Engine
+        </h2>
+        <p class="subtitle animate-item" style="margin-top:0.8rem;">
+          Combines the Genome skeleton with the SIR style embedding to generate a photorealistic clean document via controlled diffusion.
+        </p>
+        <div class="features animate-item" style="margin-top:1.5rem;">
+          <div class="feature-item">
+            <div class="feature-icon" style="background:rgba(236,72,153,0.1); color:#ec4899;">🎨</div>
+            <div class="feature-text">
+              <h4>ControlNet + SD 1.5</h4>
+              <p>Skeleton map as spatial conditioning, frozen SD base for generation quality</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon" style="background:rgba(236,72,153,0.1); color:#ec4899;">💉</div>
+            <div class="feature-text">
+              <h4>Style Injection</h4>
+              <p>512→768 StyleProjector generates pseudo-tokens for cross-attention conditioning</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon" style="background:rgba(236,72,153,0.1); color:#ec4899;">⚡</div>
+            <div class="feature-text">
+              <h4>DDIM Inference</h4>
+              <p>50-step denoising with classifier-free guidance for fast, high-quality output</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="split-visual animate-item">
+        <img src="assets/nre_visual.png" alt="NRE visualization">
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 7: Training Pipeline ==================== -->
+  <div class="slide slide-pipeline" data-transition="flip">
+    <div style="text-align:center; max-width:1000px;">
+      <span class="label-tag label-cyan animate-item">Infrastructure</span>
+      <h2 class="section-title animate-item" style="margin-top:1.5rem;">3-Stage Training Pipeline</h2>
+      <p class="subtitle animate-item" style="margin-top:0.8rem; text-align:center; margin-left:auto; margin-right:auto;">
+        Sequential training with 30K synthetic documents, FP16 mixed precision, and early stopping.
+      </p>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.5rem; margin-top:2.5rem;">
+        <div class="glass animate-item" style="text-align:left;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <span style="color:#10b981; font-weight:700; font-size:1.1rem;">Stage 1</span>
+            <span class="status-done">✓ Done</span>
+          </div>
+          <h3 style="font-size:1rem; font-weight:700; color:#10b981;">SIR Training</h3>
+          <div style="margin-top:0.8rem; font-size:0.8rem; color:rgba(228,228,231,0.5); line-height:1.8;">
+            <div>InfoNCE contrastive loss</div>
+            <div>ResNet-50 backbone</div>
+            <div>~3–5 hrs on RTX 6000</div>
+          </div>
+        </div>
+        <div class="glass animate-item" style="text-align:left;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <span style="color:#818cf8; font-weight:700; font-size:1.1rem;">Stage 2</span>
+            <span class="status-next">⟳ Next</span>
+          </div>
+          <h3 style="font-size:1rem; font-weight:700; color:#818cf8;">DGI Training</h3>
+          <div style="margin-top:0.8rem; font-size:0.8rem; color:rgba(228,228,231,0.5); line-height:1.8;">
+            <div>CE + L1 + GIoU loss</div>
+            <div>Donut + LoRA adapters</div>
+            <div>~5–8 hrs on RTX 6000</div>
+          </div>
+        </div>
+        <div class="glass animate-item" style="text-align:left;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <span style="color:#ec4899; font-weight:700; font-size:1.1rem;">Stage 3</span>
+            <span class="status-next">⟳ Next</span>
+          </div>
+          <h3 style="font-size:1rem; font-weight:700; color:#ec4899;">NRE Training</h3>
+          <div style="margin-top:0.8rem; font-size:0.8rem; color:rgba(228,228,231,0.5); line-height:1.8;">
+            <div>Noise prediction MSE</div>
+            <div>ControlNet + SD 1.5</div>
+            <div>~3–5 hrs on RTX 6000</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 8: Expected Metrics ==================== -->
+  <div class="slide slide-metrics" data-transition="morph">
+    <div style="text-align:center;">
+      <span class="label-tag label-green animate-item">Evaluation</span>
+      <h2 class="section-title animate-item" style="margin-top:1.5rem;">Expected Results</h2>
+      <p class="subtitle animate-item" style="margin-top:0.8rem; text-align:center; margin-left:auto; margin-right:auto;">
+        Measured against DIBCO and synthetic test sets
+      </p>
+      <div class="metrics-grid animate-item" style="margin-top:2.5rem;">
+        <div class="glass metric-card">
+          <div class="metric-value" style="color:#38bdf8;">28+</div>
+          <div class="metric-label">PSNR (dB)</div>
+          <div class="metric-dir" style="color:#10b981;">↑ higher = better</div>
+        </div>
+        <div class="glass metric-card">
+          <div class="metric-value" style="color:#a78bfa;">0.92</div>
+          <div class="metric-label">SSIM</div>
+          <div class="metric-dir" style="color:#10b981;">↑ higher = better</div>
+        </div>
+        <div class="glass metric-card">
+          <div class="metric-value" style="color:#10b981;">&lt;5%</div>
+          <div class="metric-label">CER</div>
+          <div class="metric-dir" style="color:#10b981;">↓ lower = better</div>
+        </div>
+        <div class="glass metric-card">
+          <div class="metric-value" style="color:#ec4899;">~0%</div>
+          <div class="metric-label">Hallucination</div>
+          <div class="metric-dir" style="color:#10b981;">↓ lower = better</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 9: Next Steps ==================== -->
+  <div class="slide slide-next" data-transition="zoomRotate">
+    <div style="text-align:center; width:100%; max-width:900px;">
+      <span class="label-tag label-amber animate-item">Roadmap</span>
+      <h2 class="section-title animate-item" style="margin-top:1.5rem;">Next Steps</h2>
+
+      <div class="steps-list animate-item" style="margin-top:2rem;">
+        <div class="glass glass-sm step-row">
+          <div class="step-number" style="color:#10b981;">01</div>
+          <div class="step-content" style="text-align:left;">
+            <h3>Train DGI Module</h3>
+            <p>Fine-tune Donut backbone with LoRA on 30K synthetic docs → genome extraction</p>
+          </div>
+          <span class="status-next" style="flex-shrink:0;">Up Next</span>
+        </div>
+        <div class="glass glass-sm step-row">
+          <div class="step-number" style="color:#ec4899;">02</div>
+          <div class="step-content" style="text-align:left;">
+            <h3>Train NRE Module</h3>
+            <p>ControlNet + style injection → photorealistic document rendering</p>
+          </div>
+          <span class="status-next" style="flex-shrink:0;">Queued</span>
+        </div>
+        <div class="glass glass-sm step-row">
+          <div class="step-number" style="color:#38bdf8;">03</div>
+          <div class="step-content" style="text-align:left;">
+            <h3>Run Ablation Studies</h3>
+            <p>3 ablations: no SIR, no genome, no ControlNet → prove each component's value</p>
+          </div>
+          <span class="label-tag" style="font-size:0.65rem; flex-shrink:0; color:rgba(228,228,231,0.4); border-color:rgba(255,255,255,0.1);">Week 9–10</span>
+        </div>
+        <div class="glass glass-sm step-row">
+          <div class="step-number" style="color:#a78bfa;">04</div>
+          <div class="step-content" style="text-align:left;">
+            <h3>Write IEEE Paper</h3>
+            <p>Compile results, figures, and ablation tables for journal submission</p>
+          </div>
+          <span class="label-tag" style="font-size:0.65rem; flex-shrink:0; color:rgba(228,228,231,0.4); border-color:rgba(255,255,255,0.1);">Week 10+</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 10: End ==================== -->
+  <div class="slide slide-end" data-transition="liquid">
+    <div style="text-align:center;">
+      <h2 class="super-title animate-item" style="font-size:3.5rem;">Thank You</h2>
+      <p class="subtitle animate-item" style="margin-top:1rem; text-align:center; margin-left:auto; margin-right:auto;">
+        Genome-Doc: Structured Neural Document Restoration
+      </p>
+      <div class="animate-item" style="margin-top:2.5rem; display:flex; gap:1rem; justify-content:center;">
+        <span class="label-tag label-green">SIR ✓</span>
+        <span class="label-tag label-purple">DGI → Training</span>
+        <span class="label-tag label-pink">NRE → Training</span>
+      </div>
+      <p class="animate-item" style="margin-top:3rem; font-size:0.9rem; color:rgba(228,228,231,0.3);">
+        Built with Donut · ResNet-50 · Stable Diffusion 1.5 · ControlNet · LoRA
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav-bar">
+  <button class="nav-btn" id="prevBtn">‹</button>
+  <div class="nav-dots" id="navDots"></div>
+  <span class="slide-counter" id="slideCounter">1 / 10</span>
+  <button class="nav-btn" id="nextBtn">›</button>
+</div>
+
+<script>
+  // ========== Particles ==========
+  (function initParticles() {
+    const container = document.getElementById('particles');
+    for (let i = 0; i < 40; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      p.style.left = Math.random() * 100 + '%';
+      p.style.animationDuration = (8 + Math.random() * 15) + 's';
+      p.style.animationDelay = Math.random() * 10 + 's';
+      p.style.width = p.style.height = (1 + Math.random() * 2) + 'px';
+      p.style.background = ['rgba(56,189,248,0.25)', 'rgba(167,139,250,0.2)', 'rgba(16,185,129,0.2)', 'rgba(236,72,153,0.15)'][Math.floor(Math.random()*4)];
+      container.appendChild(p);
+    }
+  })();
+
+  // ========== Slide Engine ==========
+  const slides = document.querySelectorAll('.slide');
+  const navDots = document.getElementById('navDots');
+  const slideCounter = document.getElementById('slideCounter');
+  let current = 0;
+  let isTransitioning = false;
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const dot = document.createElement('button');
+    dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    dot.addEventListener('click', () => goTo(i));
+    navDots.appendChild(dot);
+  });
+
+  function goTo(index) {
+    if (isTransitioning || index === current || index < 0 || index >= slides.length) return;
+    isTransitioning = true;
+
+    const prev = slides[current];
+    const next = slides[index];
+    const transition = next.dataset.transition || 'morph';
+
+    // Animate out
+    prev.classList.add(`transition-${transition}`, 'leaving');
+    prev.classList.remove('active');
+
+    // After out animation
+    setTimeout(() => {
+      prev.classList.remove(`transition-${transition}`, 'leaving');
+      prev.style.visibility = 'hidden';
+      prev.style.opacity = '0';
+
+      // Animate in
+      next.style.visibility = 'visible';
+      next.classList.add('active', `transition-${transition}`, 'entering');
+
+      setTimeout(() => {
+        next.classList.remove(`transition-${transition}`, 'entering');
+        isTransitioning = false;
+      }, 1100);
+
+    }, 650);
+
+    // Update navigation
+    current = index;
+    document.querySelectorAll('.nav-dot').forEach((d, i) => d.classList.toggle('active', i === current));
+    slideCounter.textContent = `${current + 1} / ${slides.length}`;
+  }
+
+  document.getElementById('prevBtn').addEventListener('click', () => goTo(current - 1));
+  document.getElementById('nextBtn').addEventListener('click', () => goTo(current + 1));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goTo(current + 1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(current - 1); }
+  });
+
+  // Touch support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', (e) => {
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 60) { diff > 0 ? goTo(current + 1) : goTo(current - 1); }
+  });
+</script>
+
+</body>
+</html>
